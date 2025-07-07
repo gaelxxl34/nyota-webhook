@@ -30,6 +30,12 @@ app.get("/", (req, res) => {
 });
 
 app.post("/webhook", (req, res) => {
+  console.log(
+    "Webhook accessed at",
+    new Date().toISOString(),
+    "with body:",
+    req.body
+  );
   latestPayload = req.body;
   res.redirect("/");
 });
