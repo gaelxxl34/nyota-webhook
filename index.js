@@ -5,9 +5,12 @@ const app = express();
 const PORT = 3000;
 
 // Your Nyota AI Fusion backend URL
-// This points to your Mac where the Nyota backend is running
-const BACKEND_URL = "http://172.16.117.123:3000/api/webhook/receive";
+// This points to your Mac where the Nyota backend is running via Cloudflare tunnel
+const BACKEND_URL =
+  "https://knights-favors-revolution-atlas.trycloudflare.com/api/webhook/receive";
 // For local testing: "http://localhost:3000/api/webhook/receive"
+// For private network: "http://172.16.117.123:3000/api/webhook/receive"
+// For public IP: "http://45.221.74.234:3000/api/webhook/receive"
 
 // Enhanced middleware with better error handling
 app.use(express.json({ limit: "10mb" }));
