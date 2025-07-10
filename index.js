@@ -348,6 +348,203 @@ app.post("/test-forward", async (req, res) => {
   }
 });
 
+// ===================
+// WhatsApp Cloud API Webhook
+// ===================
+
+// WhatsApp webhook configuration
+const WHATSAPP_VERIFY_TOKEN = "nyota_whatsapp_verify_token_2025"; // Change this to your preferred token
+let whatsappMessageHistory = [];
+
+// WhatsApp webhook verification (GET request)
+app.get("/whatsapp-webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  console.log("🔐 WhatsApp webhook verification attempt:");
+  console.log("Mode:", mode);
+  console.log("Token:", token);
+  console.log("Challenge:", challenge);
+
+  // Check if mode and token are correct
+  if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
+    console.log("✅ WhatsApp webhook verified successfully");
+    res.status(200).send(challenge);
+  } else {
+    console.log("❌ WhatsApp webhook verification failed");
+    res.status(403).send("Forbidden");
+  }
+});
+
+// WhatsApp webhook callback (POST request) - receives messages
+app.post("/whatsapp-webhook", (req, res) => {
+  const timestamp = new Date().toISOString();
+
+  console.log("=".repeat(60));
+  console.log("📱 WhatsApp webhook received at:", timestamp);
+  console.log("📋 Headers:", JSON.stringify(req.headers, null, 2));
+  console.log("📦 Body:", JSON.stringify(req.body, null, 2));
+  console.log("=".repeat(60));
+
+  // Store WhatsApp message data
+  const messageEntry = {
+    timestamp,
+    data: req.body,
+    headers: req.headers,
+    type: "whatsapp_webhook",
+  };
+
+  whatsappMessageHistory.push(messageEntry);
+
+  // Keep only last 50 WhatsApp messages
+  if (whatsappMessageHistory.length > 50) {
+    whatsappMessageHistory = whatsappMessageHistory.slice(-50);
+  }
+
+  // Process the webhook data
+  try {
+    if (req.body.entry) {
+      req.body.entry.forEach((entry) => {
+        if (entry.changes) {
+          entry.changes.forEach((change) => {
+            if (change.value && change.value.messages) {
+              change.value.messages.forEach((message) => {
+                console.log("📨 New message received:");
+                console.log("From:", message.from);
+                console.log("Type:", message.type);
+                console.log("Message ID:", message.id);
+
+                if (message.text) {
+                  console.log("Text:", message.text.body);
+                }
+              });
+            }
+
+            if (change.value && change.value.statuses) {
+              change.value.statuses.forEach((status) => {
+                console.log("📊 Message status update:");
+                console.log("Message ID:", status.id);
+                console.log("Status:", status.status);
+                console.log("Recipient:", status.recipient_id);
+              });
+            }
+          });
+        }
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error processing WhatsApp webhook:", error);
+  }
+
+  // Respond to WhatsApp Cloud API
+  res.status(200).json({ success: true });
+});
+
+// WhatsApp dashboard endpoint
+app.get("/whatsapp-dashboard", (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Cloud API Dashboard</title>
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      margin: 2em; 
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 2em;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .config-box {
+      background: #e3f2fd;
+      padding: 1.5em;
+      border-radius: 8px;
+      margin: 1em 0;
+      border-left: 4px solid #2196f3;
+    }
+    .message-item {
+      margin: 1em 0;
+      padding: 1em;
+      background: #f8f9fa;
+      border-radius: 5px;
+      border-left: 4px solid #25d366;
+    }
+    .timestamp {
+      font-size: 0.9em;
+      color: #666;
+      margin-bottom: 0.5em;
+    }
+    pre {
+      background: #f8f9fa;
+      padding: 1em;
+      border-radius: 5px;
+      overflow-x: auto;
+      font-size: 0.9em;
+    }
+    .code { 
+      background: #f1f3f4; 
+      padding: 0.2em 0.4em; 
+      border-radius: 3px; 
+      font-family: monospace; 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📱 WhatsApp Cloud API Dashboard</h1>
+    
+    <div class="config-box">
+      <h3>🔧 WhatsApp Webhook Configuration</h3>
+      <p><strong>Callback URL:</strong> <code class="code">http://your-server-ip/whatsapp-webhook</code></p>
+      <p><strong>Verify Token:</strong> <code class="code">${WHATSAPP_VERIFY_TOKEN}</code></p>
+      <p><em>Use these values in your WhatsApp Business API configuration.</em></p>
+    </div>
+
+    <div>
+      <h3>📊 Statistics</h3>
+      <p>Total messages received: <strong>${
+        whatsappMessageHistory.length
+      }</strong></p>
+      <p>Webhook status: <span style="color: green;">● Active</span></p>
+    </div>
+
+    <h3>📱 Recent Messages</h3>
+    ${
+      whatsappMessageHistory.length > 0
+        ? whatsappMessageHistory
+            .slice(-10)
+            .reverse()
+            .map(
+              (message) => `
+            <div class="message-item">
+              <div class="timestamp">Received: ${message.timestamp}</div>
+              <pre>${JSON.stringify(message.data, null, 2)}</pre>
+            </div>
+          `
+            )
+            .join("")
+        : "<p>No WhatsApp messages received yet. Make sure your webhook is configured correctly in WhatsApp Business API.</p>"
+    }
+
+    <script>
+      // Auto-refresh every 15 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 15000);
+    </script>
+  </div>
+</body>
+</html>`);
+});
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({
@@ -370,6 +567,9 @@ app.use("*", (req, res) => {
       "GET /test",
       "POST /test-forward",
       "GET /health",
+      "GET /whatsapp-webhook (verification)",
+      "POST /whatsapp-webhook (messages)",
+      "GET /whatsapp-dashboard",
     ],
   });
 });
@@ -390,4 +590,9 @@ app.listen(PORT, () => {
   console.log(`🧪 Test endpoint: http://localhost:${PORT}/test`);
   console.log(`🧪 Test forward: http://localhost:${PORT}/test-forward`);
   console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`📱 WhatsApp webhook: http://localhost:${PORT}/whatsapp-webhook`);
+  console.log(
+    `📱 WhatsApp dashboard: http://localhost:${PORT}/whatsapp-dashboard`
+  );
+  console.log(`🔐 WhatsApp verify token: ${WHATSAPP_VERIFY_TOKEN}`);
 });
